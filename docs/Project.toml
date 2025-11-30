@@ -1,0 +1,6 @@
+[deps]
+Dendrometry = "75af3865-8f9e-41a1-875e-d9239fa7d34a"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+
+[sources]
+Dendrometry = {path = ".."}

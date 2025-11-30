@@ -1,0 +1,13 @@
+name = "Dendrometry"
+uuid = "75af3865-8f9e-41a1-875e-d9239fa7d34a"
+authors = ["marcosdanieldasilva <marcosdasilva@5a.tec.br> and contributors"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1.12"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
