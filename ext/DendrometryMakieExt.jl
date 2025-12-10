@@ -278,39 +278,3 @@ Makie.plottype(::AllometricModel) = SiteCurvePlot
 function Makie.convert_arguments(::Type{<:SiteCurvePlot}, model::AllometricModel)
   return (model, 15.0, 2.0)
 end
-
-# Opção 1: Específica (Recomendada)
-sitecurves(best, 60, 0.5)
-
-# Opção 2: Genérica (Usa os defaults definidos no convert_arguments)
-plot(best)
-
-# Opção 3: Dashboard de Diagnóstico
-modelcheck(best)
-
-modelcheck(reg)
-
-modelcheck(reg2)
-
-modelcheck(reg,
-  color=:cyan,          # Pontos ciano
-  markersize=10,        # Pontos maiores
-  linecolor=:yellow,    # Linhas de referência amarelas
-  histcolor=:white      # Histograma branco
-)
-
-modelcheck(reg,
-  color=:black,         # Pontos pretos
-  markersize=6,         # Pontos menores e discretos
-  linecolor=:black,     # Linhas pretas
-  linewidth=1,          # Linhas finas
-  histcolor=(:gray80, 1.0), # Cinza claro sólido
-  alpha=0.6             # Leve transparência nos pontos
-)
-
-modelcheck(reg,
-  surfacecolor=:magma,  # Mapa de cor 'magma' (roxo/laranja)
-  surfacealpha=0.2,     # Superfície bem transparente ("fantasma")
-  color=:blue           # Pontos azuis para contrastar
-)
-
