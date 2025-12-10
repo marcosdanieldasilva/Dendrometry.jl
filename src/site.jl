@@ -1,15 +1,15 @@
-function _calculate_delta(model::AllometricModel, data_age, index_age::Real)
+function calculatedelta(model::AllometricModel, dataage, indexage::Real)
   (yname, xname, qname...) = propertynames(model.cols)
-  data_index_age = deepcopy(data_age[!, [yname, xname, qname...]])
-  data_index_age[!, xname] .= index_age
+  dataindexage = deepcopy(dataage[!, [yname, xname, qname...]])
+  dataindexage[!, xname] .= indexage
 
-  mm_age = modelmatrix(formula(model).rhs.terms[2:end], data_age)
-  mm_index_age = modelmatrix(formula(model).rhs.terms[2:end], data_index_age)
+  mmage = modelmatrix(formula(model).rhs.terms[2:end], dataage)
+  mmindexage = modelmatrix(formula(model).rhs.terms[2:end], dataindexage)
 
   β = coef(model)[2:end]'
 
   # Calculate the difference in model matrices
-  Δ = mm_index_age .- mm_age
+  Δ = mmindexage .- mmage
 
   # Compute the sum for each observation
   Δ = sum(β .* Δ, dims=2)[:]
@@ -17,92 +17,90 @@ function _calculate_delta(model::AllometricModel, data_age, index_age::Real)
   return Δ
 end
 
-function site_classification(model::AllometricModel, data_age, index_age::Real)
-  if index_age <= 0
+function siteclassification(model::AllometricModel, dataage, indexage::Real)
+  if indexage <= 0
     throw(DomainError("Index Age must be positive."))
   end
-  Δ = _calculate_delta(model, data_age, index_age)
+  Δ = calculatedelta(model, dataage, indexage)
   # Calculate the site classification
   ft = formula(model).lhs
-  hdom = modelcols(ft, data_age)
+  hdom = modelcols(ft, dataage)
   site = @. hdom + Δ
 
   if isa(ft, FunctionTerm)
     # Apply the function-specific prediction logic
     # Overwrite ŷ with the corrected values using the filtered data 'x'
-    AllometricModels.predictbiascorrected!(site, [index_age], ft, model.σ²)
+    AllometricModels.predictbiascorrected!(site, [indexage], ft, model.σ²)
   end
 
   return round.(site, digits=1)
 end
 
-function hdom_classification(model::AllometricModel, data_age::AbstractDataFrame, index_age::Real, site::Vector{<:Real})
-  if index_age <= 0
+function hdomclassification(model::AllometricModel, dataage::AbstractDataFrame, indexage::Real, site::Vector{<:Real})
+  if indexage <= 0
     throw(DomainError("Index Age must be positive."))
   elseif any(x -> x < 0, site)
     throw(DomainError("Site values must be positive"))
   end
-  Δ = _calculate_delta(model, data_age, index_age)
+  Δ = calculatedelta(model, dataage, indexage)
   (yname, xname, qname...) = propertynames(model.cols)
-  site_data = deepcopy(data_age[!, [yname, xname, qname...]])
-  site_data[!, yname] .= site
-  site_data[!, xname] .= index_age
+  sitedata = deepcopy(dataage[!, [yname, xname, qname...]])
+  sitedata[!, yname] .= site
+  sitedata[!, xname] .= indexage
   # Calculate the site classification
   ft = formula(model).lhs
-  site = modelcols(ft, site_data)
+  site = modelcols(ft, sitedata)
   hdom = @. site - Δ
 
   if isa(ft, FunctionTerm)
     # Apply the function-specific prediction logic
     # Overwrite ŷ with the corrected values using the filtered data 'x'
-    AllometricModels.predictbiascorrected!(hdom, data_age[!, xname], ft, model.σ²)
+    AllometricModels.predictbiascorrected!(hdom, dataage[!, xname], ft, model.σ²)
   end
 
   return round.(hdom, digits=1)
 end
 
-_class_center(x::Real, hi::Real) = round(x / hi) * hi + (hi / 2)
-
-function site_table(model::AllometricModel, index_age::Real, hi::Real)
+function sitetable(model::AllometricModel, indexage::Real, hi::Real)
   if hi <= 0
     throw(DomainError("The height increment must be positive."))
   end
   # Extract property names from the fitted model's data
   (hd, age, q...) = propertynames(model.cols)
   # Calculate site classification
-  site = site_classification(model, data, index_age)
+  site = siteclassification(model, data, indexage)
   # Get unique and sorted site classes
-  sites = _class_center.(site, hi) |> unique |> sort
+  sites = classcenter.(site, hi) |> unique |> sort
   # Get unique and sorted ages
   ages = model.cols[age] |> unique |> sort
   # Repeat ages for each site class
-  repeated_ages = repeat(ages, outer=length(sites))
+  repeatedages = repeat(ages, outer=length(sites))
   # Create repeated site classes
-  repeated_sites = vcat([fill(s, length(ages)) for s in sites]...)
+  repeatedsites = vcat([fill(s, length(ages)) for s in sites]...)
   # Create initial DataFrame with repeated ages and sites
-  site_table = DataFrame(age => repeated_ages, hd => repeated_sites)
+  sitetable = DataFrame(age => repeatedages, hd => repeatedsites)
   # Predict the dominant heights for the site classification
-  hdom_predict = hdom_classification(model, site_table, index_age, repeated_sites)
+  hdompredict = hdomclassification(model, sitetable, indexage, repeatedsites)
   # Insert the predicted heights into the DataFrame
-  insertcols!(site_table, :site => hdom_predict, makeunique=true)
+  insertcols!(sitetable, :site => hdompredict, makeunique=true)
   # transform into a pivote table by site
-  site_table = unstack(site_table, propertynames(site_table)...) |> dropmissing!
+  sitetable = unstack(sitetable, propertynames(sitetable)...) |> dropmissing!
   # Rename columns to reflect site classes
-  new_column_names = [Symbol("S_$(s)") for s in names(site_table)[2:end]]
-  rename!(site_table, [age; new_column_names])
+  newcolumnnames = [Symbol("S$(s)") for s in names(sitetable)[2:end]]
+  rename!(sitetable, [age; newcolumnnames])
   # Create the site plot
-  # unique_sites = sort(sites, rev=true)
-  # site_trace = AbstractTrace[]
-  # for (i, s) in enumerate(unique_sites)
-  #   idx = findall(x -> x == s, repeated_sites)
-  #   push!(site_trace, scatter(
-  #     x=repeated_ages[idx],
-  #     y=hdom_predict[idx],
+  # uniquesites = sort(sites, rev=true)
+  # sitetrace = AbstractTrace[]
+  # for (i, s) in enumerate(uniquesites)
+  #   idx = findall(x -> x == s, repeatedsites)
+  #   push!(sitetrace, scatter(
+  #     x=repeatedages[idx],
+  #     y=hdompredict[idx],
   #     mode="markers+lines",
   #     name=string(s),
   #     marker=attr(
   #       opacity=0.6,
-  #       line_width=0
+  #       linewidth=0
   #     ),
   #     line=attr(width=2)
   #   ))
@@ -114,8 +112,8 @@ function site_table(model::AllometricModel, index_age::Real, hi::Real)
   #   yaxis=attr(title=string(hd))
   # )
 
-  # site_plot = plot(site_trace, layout)
+  # siteplot = plot(sitetrace, layout)
 
-  # return SiteAnalysis(site_table, site_plot)
-  site_table
+  # return SiteAnalysis(sitetable, siteplot)
+  sitetable
 end
